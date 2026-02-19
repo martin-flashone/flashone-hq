@@ -11,8 +11,6 @@
     import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
       from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 
-    // TODO: Replace with your Firebase web app config from Firebase Console
-    // Project Settings → General → Your Apps → Web App → Firebase Config
     const firebaseConfig = {
       apiKey: "AIzaSyCr0wV53UXv1Rxu-LohsIR0-87iYnPRpm8",
       authDomain: "flashone-hq.firebaseapp.com",
@@ -32,7 +30,6 @@
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
-    // Auth state
     onAuthStateChanged(auth, (user) => {
       if (user) {
         if (!ALLOWED_EMAILS.includes(user.email)) {
@@ -60,7 +57,6 @@
       document.getElementById('dashboard').style.display = 'block';
     }
 
-    // Sign in
     document.getElementById('sign-in-btn').addEventListener('click', async () => {
       try {
         document.getElementById('auth-error').style.display = 'none';
@@ -71,23 +67,26 @@
       }
     });
 
-    // Sign out
     document.getElementById('sign-out-btn').addEventListener('click', () => signOut(auth));
 
-    // Rate limit tracker
     function loadDashboard() {
-      const sessionPct = parseInt(localStorage.getItem('session_rate_pct') || '0');
-      const weeklyPct = parseInt(localStorage.getItem('weekly_rate_pct') || '0');
-      const lastUpdated = localStorage.getItem('rate_last_updated') || 'Never';
+      loadRateLimits();
+      loadWorkLog();
+    }
 
+    // ── Rate Limit Tracker ──────────────────────────────────────────
+    function loadRateLimits() {
+      const sessionPct = parseInt(localStorage.getItem('session_rate_pct') || '0');
+      const weeklyPct  = parseInt(localStorage.getItem('weekly_rate_pct')  || '0');
+      const lastUpdated = localStorage.getItem('rate_last_updated') || 'Never';
       setRateLimit('session', sessionPct);
-      setRateLimit('weekly', weeklyPct);
+      setRateLimit('weekly',  weeklyPct);
       document.getElementById('rate-last-updated').textContent = lastUpdated;
       checkWarnings(sessionPct, weeklyPct);
     }
 
     function setRateLimit(type, pct) {
-      const bar = document.getElementById(`${type}-bar`);
+      const bar   = document.getElementById(`${type}-bar`);
       const label = document.getElementById(`${type}-pct-label`);
       const input = document.getElementById(`${type}-input`);
       pct = Math.min(100, Math.max(0, pct));
@@ -102,7 +101,7 @@
       if (sessionPct >= 70 || weeklyPct >= 70) {
         const msgs = [];
         if (sessionPct >= 70) msgs.push(`Session at ${sessionPct}%`);
-        if (weeklyPct >= 70) msgs.push(`Weekly at ${weeklyPct}%`);
+        if (weeklyPct  >= 70) msgs.push(`Weekly at ${weeklyPct}%`);
         banner.textContent = `⚠️ Rate limit warning: ${msgs.join(' · ')} — pausing heavy tasks.`;
         banner.style.display = 'block';
       } else {
@@ -110,19 +109,65 @@
       }
     }
 
-    // Update rate limits
     document.getElementById('update-rates-btn').addEventListener('click', () => {
       const sessionPct = parseInt(document.getElementById('session-input').value || '0');
-      const weeklyPct = parseInt(document.getElementById('weekly-input').value || '0');
-      localStorage.setItem('session_rate_pct', sessionPct);
-      localStorage.setItem('weekly_rate_pct', weeklyPct);
+      const weeklyPct  = parseInt(document.getElementById('weekly-input').value  || '0');
+      localStorage.setItem('session_rate_pct',  sessionPct);
+      localStorage.setItem('weekly_rate_pct',   weeklyPct);
       const now = new Date().toLocaleString();
       localStorage.setItem('rate_last_updated', now);
       document.getElementById('rate-last-updated').textContent = now;
       setRateLimit('session', sessionPct);
-      setRateLimit('weekly', weeklyPct);
+      setRateLimit('weekly',  weeklyPct);
       checkWarnings(sessionPct, weeklyPct);
     });
+
+    // ── Work Log ────────────────────────────────────────────────────
+    async function loadWorkLog() {
+      const container = document.getElementById('work-log-list');
+      const lastUpdatedEl = document.getElementById('log-last-updated');
+      try {
+        const res = await fetch('/work-log.json?t=' + Date.now());
+        const data = await res.json();
+
+        if (data.lastUpdated) {
+          const d = new Date(data.lastUpdated);
+          lastUpdatedEl.textContent = d.toLocaleString('en-US', {
+            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+            hour12: true, timeZoneName: 'short'
+          });
+        }
+
+        container.innerHTML = '';
+        const entries = [...data.entries].reverse(); // newest first
+        entries.forEach(entry => {
+          const div = document.createElement('div');
+          div.className = 'log-item';
+          const catColor = {
+            infrastructure: 'cat-infra',
+            qa:             'cat-qa',
+            content:        'cat-content',
+            social:         'cat-social',
+            other:          'cat-other'
+          }[entry.category] || 'cat-other';
+
+          div.innerHTML = `
+            <div class="log-meta">
+              <span class="log-date">${entry.date} · ${entry.time}</span>
+              <span class="log-cat ${catColor}">${entry.category}</span>
+            </div>
+            <div class="log-task">${entry.task}</div>
+            ${entry.notes ? `<div class="log-notes">${entry.notes}</div>` : ''}
+            <span class="badge ${entry.status === 'done' ? 'done' : entry.status === 'in-progress' ? 'in-progress' : 'not-started'} log-status">
+              ${entry.status === 'done' ? '✓ Done' : entry.status === 'in-progress' ? '⚡ In Progress' : '○ Queued'}
+            </span>
+          `;
+          container.appendChild(div);
+        });
+      } catch (e) {
+        container.innerHTML = '<div class="log-item" style="color:var(--muted)">Could not load work log.</div>';
+      }
+    }
 
     window._auth = auth;
   </script>
@@ -131,17 +176,17 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0f0f0f;
-      --surface: #1a1a1a;
-      --surface2: #242424;
-      --border: #2e2e2e;
-      --text: #e5e5e5;
-      --muted: #737373;
-      --amber: #f59e0b;
+      --bg:        #0f0f0f;
+      --surface:   #1a1a1a;
+      --surface2:  #242424;
+      --border:    #2e2e2e;
+      --text:      #e5e5e5;
+      --muted:     #737373;
+      --amber:     #f59e0b;
       --amber-dim: #92400e;
-      --green: #22c55e;
-      --yellow: #eab308;
-      --red: #ef4444;
+      --green:     #22c55e;
+      --yellow:    #eab308;
+      --red:       #ef4444;
     }
 
     body {
@@ -152,7 +197,7 @@
       line-height: 1.5;
     }
 
-    /* SPLASH / AUTH */
+    /* ── AUTH SPLASH ─────────────────────────────────────────────── */
     #splash {
       display: flex;
       flex-direction: column;
@@ -163,7 +208,7 @@
       padding: 2rem;
     }
     .splash-logo { font-size: 2.5rem; font-weight: 800; color: var(--amber); letter-spacing: -1px; }
-    .splash-sub { color: var(--muted); font-size: 0.95rem; }
+    .splash-sub  { color: var(--muted); font-size: 0.95rem; }
     #sign-in-btn {
       background: var(--amber);
       color: #000;
@@ -176,15 +221,9 @@
       transition: opacity 0.15s;
     }
     #sign-in-btn:hover { opacity: 0.85; }
-    #auth-error {
-      display: none;
-      color: var(--red);
-      font-size: 0.875rem;
-      text-align: center;
-      max-width: 320px;
-    }
+    #auth-error { display: none; color: var(--red); font-size: 0.875rem; text-align: center; max-width: 320px; }
 
-    /* DASHBOARD */
+    /* ── DASHBOARD ───────────────────────────────────────────────── */
     #dashboard { display: none; }
 
     header {
@@ -198,9 +237,9 @@
       top: 0;
       z-index: 10;
     }
-    .logo { font-size: 1.25rem; font-weight: 800; color: var(--amber); }
+    .logo         { font-size: 1.25rem; font-weight: 800; color: var(--amber); }
     .header-right { display: flex; align-items: center; gap: 1rem; }
-    #user-email { font-size: 0.8rem; color: var(--muted); }
+    #user-email   { font-size: 0.8rem; color: var(--muted); }
     #sign-out-btn {
       background: var(--surface2);
       border: 1px solid var(--border);
@@ -221,7 +260,7 @@
       gap: 1.5rem;
     }
 
-    /* WARNING BANNER */
+    /* ── WARNING BANNER ──────────────────────────────────────────── */
     #rate-warning {
       display: none;
       background: #451a03;
@@ -233,13 +272,8 @@
       font-weight: 500;
     }
 
-    /* CARDS */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.25rem;
-    }
+    /* ── CARDS ───────────────────────────────────────────────────── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.25rem; }
     .card-title {
       font-size: 0.75rem;
       font-weight: 600;
@@ -248,8 +282,18 @@
       color: var(--muted);
       margin-bottom: 1rem;
     }
+    .card-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .card-header .card-title { margin-bottom: 0; }
+    .card-meta { font-size: 0.72rem; color: var(--muted); }
 
-    /* RATE LIMIT TRACKER */
+    /* ── RATE LIMIT TRACKER ──────────────────────────────────────── */
     .rate-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -257,35 +301,13 @@
       margin-bottom: 1.25rem;
     }
     @media (max-width: 500px) { .rate-grid { grid-template-columns: 1fr; } }
-
-    .rate-item label {
-      font-size: 0.85rem;
-      color: var(--muted);
-      display: block;
-      margin-bottom: 0.5rem;
-    }
-    .bar-track {
-      background: var(--surface2);
-      border-radius: 99px;
-      height: 10px;
-      overflow: hidden;
-      margin-bottom: 0.4rem;
-    }
-    .bar-fill {
-      height: 100%;
-      border-radius: 99px;
-      transition: width 0.4s ease, background 0.3s;
-      width: 0%;
-    }
-    .bar-fill.ok { background: var(--green); }
+    .rate-item label { font-size: 0.85rem; color: var(--muted); display: block; margin-bottom: 0.5rem; }
+    .bar-track  { background: var(--surface2); border-radius: 99px; height: 10px; overflow: hidden; margin-bottom: 0.4rem; }
+    .bar-fill   { height: 100%; border-radius: 99px; transition: width 0.4s ease, background 0.3s; width: 0%; }
+    .bar-fill.ok      { background: var(--green); }
     .bar-fill.warning { background: var(--yellow); }
-    .bar-fill.danger { background: var(--red); }
-
-    .rate-row {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-    }
+    .bar-fill.danger  { background: var(--red); }
+    .rate-row  { display: flex; align-items: center; gap: 0.75rem; }
     .pct-label { font-size: 0.85rem; font-weight: 600; min-width: 36px; }
     .rate-input {
       background: var(--surface2);
@@ -316,35 +338,20 @@
       cursor: pointer;
     }
     .update-btn:hover { opacity: 0.85; }
-
-    /* LEGEND */
-    .legend {
-      display: flex;
-      gap: 1rem;
-      font-size: 0.75rem;
-      color: var(--muted);
-      margin-top: 0.5rem;
-    }
+    .legend     { display: flex; gap: 1rem; font-size: 0.75rem; color: var(--muted); margin-top: 0.5rem; }
     .legend span { display: flex; align-items: center; gap: 0.3rem; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    .dot.ok { background: var(--green); }
+    .dot        { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot.ok     { background: var(--green); }
     .dot.warning { background: var(--yellow); }
     .dot.danger { background: var(--red); }
 
-    /* STATUS GRID */
-    .status-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-      gap: 1rem;
-    }
-    .status-card {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1rem;
-    }
+    /* ── PROJECT STATUS ──────────────────────────────────────────── */
+    .status-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; }
+    .status-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
     .status-card .s-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.35rem; }
-    .status-card .s-sub { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.75rem; }
+    .status-card .s-sub   { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.75rem; }
+
+    /* ── BADGES ──────────────────────────────────────────────────── */
     .badge {
       display: inline-block;
       font-size: 0.7rem;
@@ -352,29 +359,59 @@
       padding: 0.2rem 0.6rem;
       border-radius: 99px;
     }
-    .badge.in-progress { background: #1c3a5e; color: #60a5fa; }
-    .badge.not-started { background: #1f1f1f; color: var(--muted); }
-    .badge.done { background: #14532d; color: #4ade80; }
+    .badge.in-progress  { background: #1c3a5e; color: #60a5fa; }
+    .badge.not-started  { background: #1f1f1f; color: var(--muted); }
+    .badge.done         { background: #14532d; color: #4ade80; }
+    .badge.blocked      { background: #3b1010; color: #f87171; }
 
-    /* TASKS */
+    /* ── ACTIVE TASKS ────────────────────────────────────────────── */
     .task-list { display: flex; flex-direction: column; gap: 0.6rem; }
     .task-item {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 0.75rem;
-      padding: 0.6rem 0.75rem;
+      padding: 0.65rem 0.75rem;
       background: var(--surface2);
       border-radius: 8px;
       font-size: 0.875rem;
     }
-    .task-item .t-badge { flex-shrink: 0; }
+    .task-item .t-badge { flex-shrink: 0; margin-top: 1px; }
+    .task-item .t-text  { flex: 1; }
+    .task-item .t-note  { font-size: 0.75rem; color: var(--muted); margin-top: 0.2rem; }
 
-    /* QUICK LINKS */
-    .links-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-      gap: 0.75rem;
+    /* ── WORK LOG ────────────────────────────────────────────────── */
+    .log-item {
+      padding: 0.85rem 1rem;
+      background: var(--surface2);
+      border-radius: 10px;
+      border-left: 3px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
     }
+    .log-item + .log-item { margin-top: 0.6rem; }
+    .log-meta  { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .log-date  { font-size: 0.72rem; color: var(--muted); }
+    .log-task  { font-size: 0.9rem; font-weight: 500; }
+    .log-notes { font-size: 0.78rem; color: var(--muted); }
+    .log-status { margin-top: 0.25rem; }
+
+    .log-cat {
+      font-size: 0.65rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+    }
+    .cat-infra   { background: #1e1b4b; color: #a5b4fc; }
+    .cat-qa      { background: #1c3a5e; color: #60a5fa; }
+    .cat-content { background: #3b2f10; color: #fbbf24; }
+    .cat-social  { background: #1a2e1a; color: #4ade80; }
+    .cat-other   { background: #1f1f1f; color: var(--muted); }
+
+    /* ── QUICK LINKS ─────────────────────────────────────────────── */
+    .links-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.75rem; }
     .quick-link {
       display: block;
       background: var(--surface2);
@@ -453,8 +490,23 @@
         <div class="card-title">📊 Project Status</div>
         <div class="status-grid">
           <div class="status-card">
-            <div class="s-title">QA Testing</div>
-            <div class="s-sub">App exploration + test plan</div>
+            <div class="s-title">App Exploration</div>
+            <div class="s-sub">Full navigation map, study modes, deck creation</div>
+            <span class="badge done">Done</span>
+          </div>
+          <div class="status-card">
+            <div class="s-title">QA Test Plan</div>
+            <div class="s-sub">7 test profiles, bug tracker, app map</div>
+            <span class="badge done">Done</span>
+          </div>
+          <div class="status-card">
+            <div class="s-title">Project Dashboard</div>
+            <div class="s-sub">Firebase hosting, auth gate, work log</div>
+            <span class="badge done">Done</span>
+          </div>
+          <div class="status-card">
+            <div class="s-title">Google Auth</div>
+            <div class="s-sub">Firebase support email config pending</div>
             <span class="badge in-progress">In Progress</span>
           </div>
           <div class="status-card">
@@ -463,34 +515,93 @@
             <span class="badge not-started">Not Started</span>
           </div>
           <div class="status-card">
-            <div class="s-title">Android Campaign</div>
-            <div class="s-sub">Play Store approval push</div>
-            <span class="badge not-started">Not Started</span>
-          </div>
-          <div class="status-card">
             <div class="s-title">Social Media</div>
             <div class="s-sub">Instagram, X, Facebook setup</div>
             <span class="badge not-started">Not Started</span>
-          </div>
-          <div class="status-card">
-            <div class="s-title">Project Site</div>
-            <div class="s-sub">Firebase dashboard (this!)</div>
-            <span class="badge in-progress">In Progress</span>
           </div>
         </div>
       </div>
 
       <!-- ACTIVE TASKS -->
       <div class="card">
-        <div class="card-title">✅ Active Tasks</div>
+        <div class="card-title">✅ Task Queue</div>
         <div class="task-list">
-          <div class="task-item"><span class="badge in-progress t-badge">Active</span> Firebase project site — add Firebase Auth web config</div>
-          <div class="task-item"><span class="badge in-progress t-badge">Active</span> Make GitHub repo private</div>
-          <div class="task-item"><span class="badge in-progress t-badge">Active</span> Continue FlashOne app deep exploration</div>
-          <div class="task-item"><span class="badge not-started t-badge">Queued</span> Set up Instagram, X, Facebook accounts</div>
-          <div class="task-item"><span class="badge not-started t-badge">Queued</span> Build social media content strategy</div>
-          <div class="task-item"><span class="badge not-started t-badge">Queued</span> Set up Apple test accounts (3 tiers)</div>
-          <div class="task-item"><span class="badge not-started t-badge">Queued</span> Build demo content + YouTube script</div>
+
+          <div class="task-item">
+            <span class="badge in-progress t-badge">Active</span>
+            <div class="t-text">
+              Complete Firebase Google Auth (set support email)
+              <div class="t-note">Blocked by Angular dropdown — needs manual step in Firebase Console</div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <span class="badge not-started t-badge">Queued</span>
+            <div class="t-text">
+              Set up social media accounts (Instagram, X, Facebook)
+              <div class="t-note">For FlashOne brand presence</div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <span class="badge not-started t-badge">Queued</span>
+            <div class="t-text">
+              Set up Apple ID test accounts (3 tiers: Free, Premium, Pro)
+              <div class="t-note">For iOS auth testing</div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <span class="badge not-started t-badge">Queued</span>
+            <div class="t-text">
+              Build demo content + YouTube script
+              <div class="t-note">Repeatable study flow for marketing</div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <span class="badge not-started t-badge">Queued</span>
+            <div class="t-text">
+              Social media strategy — student outreach
+              <div class="t-note">Find students who need study help, send curated flashcard decks</div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <span class="badge not-started t-badge">Queued</span>
+            <div class="t-text">
+              Access app code repo (dev branch)
+              <div class="t-note">Waiting for Sunny to share access</div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <span class="badge done t-badge">Done</span>
+            <div class="t-text">
+              GitHub repo setup (martin-flashone/flashone-hq, private)
+              <div class="t-note">SSH, PAT, gh CLI, professional branch/PR workflow</div>
+            </div>
+          </div>
+
+          <div class="task-item">
+            <span class="badge done t-badge">Done</span>
+            <div class="t-text">
+              FlashOne app deep exploration + QA plan
+              <div class="t-note">All 5 tabs mapped, 7 test profiles, bug tracker created</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- MARTIN'S WORK LOG -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📋 Martin's Work Log</div>
+          <div class="card-meta">Updated: <span id="log-last-updated">Loading…</span></div>
+        </div>
+        <div id="work-log-list">
+          <div class="log-item" style="color:var(--muted); font-size:0.875rem;">Loading…</div>
         </div>
       </div>
 

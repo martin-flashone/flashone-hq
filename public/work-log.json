@@ -1,0 +1,41 @@
+{
+  "lastUpdated": "2026-02-19T18:15:00Z",
+  "entries": [
+    {
+      "id": 1,
+      "date": "2026-02-19",
+      "time": "10:15 AM PT",
+      "task": "Updated project dashboard with live Work Log tracker",
+      "status": "done",
+      "category": "infrastructure",
+      "notes": "Dashboard now shows real-time work log. Set compaction buffer to 8000 tokens."
+    },
+    {
+      "id": 2,
+      "date": "2026-02-19",
+      "time": "10:00 AM PT",
+      "task": "Set up FlashOne HQ project dashboard (Firebase Hosting, auth gate, rate limit tracker)",
+      "status": "done",
+      "category": "infrastructure",
+      "notes": "Live at flashone-hq.web.app. Google Sign-In auth gate with allowlist."
+    },
+    {
+      "id": 3,
+      "date": "2026-02-19",
+      "time": "09:30 AM PT",
+      "task": "GitHub repo setup — martin-flashone/flashone-hq (private)",
+      "status": "done",
+      "category": "infrastructure",
+      "notes": "SSH key, PAT, gh CLI all configured. Professional branch/PR workflow established."
+    },
+    {
+      "id": 4,
+      "date": "2026-02-19",
+      "time": "09:00 AM PT",
+      "task": "FlashOne app deep exploration — navigation, deck creation, study modes",
+      "status": "done",
+      "category": "qa",
+      "notes": "Mapped all 5 tabs, deck types, AI creation methods, subscription tier differences."
+    }
+  ]
+}
