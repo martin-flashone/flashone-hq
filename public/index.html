@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlashOne HQ</title>
+
+  <!-- Firebase SDKs -->
+  <script type="module">
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+    import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged }
+      from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+
+    // TODO: Replace with your Firebase web app config from Firebase Console
+    // Project Settings → General → Your Apps → Web App → Firebase Config
+    const firebaseConfig = {
+      apiKey: "AIzaSyCr0wV53UXv1Rxu-LohsIR0-87iYnPRpm8",
+      authDomain: "flashone-hq.firebaseapp.com",
+      projectId: "flashone-hq",
+      storageBucket: "flashone-hq.firebasestorage.app",
+      messagingSenderId: "134997614663",
+      appId: "1:134997614663:web:4d2aecd2776c44d34d1162",
+      measurementId: "G-VRD20VY1NZ"
+    };
+
+    const ALLOWED_EMAILS = [
+      'sunshine@bravefireandice.com',
+      'proflashone@gmail.com'
+    ];
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
+
+    // Auth state
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        if (!ALLOWED_EMAILS.includes(user.email)) {
+          signOut(auth);
+          showAuth();
+          document.getElementById('auth-error').textContent =
+            `Access denied for ${user.email}. This dashboard is private.`;
+          document.getElementById('auth-error').style.display = 'block';
+          return;
+        }
+        hideSplash();
+        document.getElementById('user-email').textContent = user.email;
+        loadDashboard();
+      } else {
+        showAuth();
+      }
+    });
+
+    function showAuth() {
+      document.getElementById('splash').style.display = 'flex';
+      document.getElementById('dashboard').style.display = 'none';
+    }
+    function hideSplash() {
+      document.getElementById('splash').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+    }
+
+    // Sign in
+    document.getElementById('sign-in-btn').addEventListener('click', async () => {
+      try {
+        document.getElementById('auth-error').style.display = 'none';
+        await signInWithPopup(auth, provider);
+      } catch (e) {
+        document.getElementById('auth-error').textContent = 'Sign in failed. Try again.';
+        document.getElementById('auth-error').style.display = 'block';
+      }
+    });
+
+    // Sign out
+    document.getElementById('sign-out-btn').addEventListener('click', () => signOut(auth));
+
+    // Rate limit tracker
+    function loadDashboard() {
+      const sessionPct = parseInt(localStorage.getItem('session_rate_pct') || '0');
+      const weeklyPct = parseInt(localStorage.getItem('weekly_rate_pct') || '0');
+      const lastUpdated = localStorage.getItem('rate_last_updated') || 'Never';
+
+      setRateLimit('session', sessionPct);
+      setRateLimit('weekly', weeklyPct);
+      document.getElementById('rate-last-updated').textContent = lastUpdated;
+      checkWarnings(sessionPct, weeklyPct);
+    }
+
+    function setRateLimit(type, pct) {
+      const bar = document.getElementById(`${type}-bar`);
+      const label = document.getElementById(`${type}-pct-label`);
+      const input = document.getElementById(`${type}-input`);
+      pct = Math.min(100, Math.max(0, pct));
+      bar.style.width = pct + '%';
+      bar.className = 'bar-fill ' + (pct >= 70 ? 'danger' : pct >= 50 ? 'warning' : 'ok');
+      label.textContent = pct + '%';
+      if (input) input.value = pct;
+    }
+
+    function checkWarnings(sessionPct, weeklyPct) {
+      const banner = document.getElementById('rate-warning');
+      if (sessionPct >= 70 || weeklyPct >= 70) {
+        const msgs = [];
+        if (sessionPct >= 70) msgs.push(`Session at ${sessionPct}%`);
+        if (weeklyPct >= 70) msgs.push(`Weekly at ${weeklyPct}%`);
+        banner.textContent = `⚠️ Rate limit warning: ${msgs.join(' · ')} — pausing heavy tasks.`;
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    // Update rate limits
+    document.getElementById('update-rates-btn').addEventListener('click', () => {
+      const sessionPct = parseInt(document.getElementById('session-input').value || '0');
+      const weeklyPct = parseInt(document.getElementById('weekly-input').value || '0');
+      localStorage.setItem('session_rate_pct', sessionPct);
+      localStorage.setItem('weekly_rate_pct', weeklyPct);
+      const now = new Date().toLocaleString();
+      localStorage.setItem('rate_last_updated', now);
+      document.getElementById('rate-last-updated').textContent = now;
+      setRateLimit('session', sessionPct);
+      setRateLimit('weekly', weeklyPct);
+      checkWarnings(sessionPct, weeklyPct);
+    });
+
+    window._auth = auth;
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f0f0f;
+      --surface: #1a1a1a;
+      --surface2: #242424;
+      --border: #2e2e2e;
+      --text: #e5e5e5;
+      --muted: #737373;
+      --amber: #f59e0b;
+      --amber-dim: #92400e;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      line-height: 1.5;
+    }
+
+    /* SPLASH / AUTH */
+    #splash {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      gap: 1.5rem;
+      padding: 2rem;
+    }
+    .splash-logo { font-size: 2.5rem; font-weight: 800; color: var(--amber); letter-spacing: -1px; }
+    .splash-sub { color: var(--muted); font-size: 0.95rem; }
+    #sign-in-btn {
+      background: var(--amber);
+      color: #000;
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    #sign-in-btn:hover { opacity: 0.85; }
+    #auth-error {
+      display: none;
+      color: var(--red);
+      font-size: 0.875rem;
+      text-align: center;
+      max-width: 320px;
+    }
+
+    /* DASHBOARD */
+    #dashboard { display: none; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 1.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .logo { font-size: 1.25rem; font-weight: 800; color: var(--amber); }
+    .header-right { display: flex; align-items: center; gap: 1rem; }
+    #user-email { font-size: 0.8rem; color: var(--muted); }
+    #sign-out-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      cursor: pointer;
+    }
+    #sign-out-btn:hover { border-color: var(--amber); }
+
+    main {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* WARNING BANNER */
+    #rate-warning {
+      display: none;
+      background: #451a03;
+      border: 1px solid var(--amber-dim);
+      color: var(--amber);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+
+    /* CARDS */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.25rem;
+    }
+    .card-title {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      margin-bottom: 1rem;
+    }
+
+    /* RATE LIMIT TRACKER */
+    .rate-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+    @media (max-width: 500px) { .rate-grid { grid-template-columns: 1fr; } }
+
+    .rate-item label {
+      font-size: 0.85rem;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 0.5rem;
+    }
+    .bar-track {
+      background: var(--surface2);
+      border-radius: 99px;
+      height: 10px;
+      overflow: hidden;
+      margin-bottom: 0.4rem;
+    }
+    .bar-fill {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 0.4s ease, background 0.3s;
+      width: 0%;
+    }
+    .bar-fill.ok { background: var(--green); }
+    .bar-fill.warning { background: var(--yellow); }
+    .bar-fill.danger { background: var(--red); }
+
+    .rate-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .pct-label { font-size: 0.85rem; font-weight: 600; min-width: 36px; }
+    .rate-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: 0.3rem 0.5rem;
+      font-size: 0.85rem;
+      width: 70px;
+    }
+    .rate-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.75rem;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .last-updated { font-size: 0.75rem; color: var(--muted); }
+    .update-btn {
+      background: var(--amber);
+      color: #000;
+      border: none;
+      padding: 0.4rem 1rem;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .update-btn:hover { opacity: 0.85; }
+
+    /* LEGEND */
+    .legend {
+      display: flex;
+      gap: 1rem;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 0.5rem;
+    }
+    .legend span { display: flex; align-items: center; gap: 0.3rem; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .dot.ok { background: var(--green); }
+    .dot.warning { background: var(--yellow); }
+    .dot.danger { background: var(--red); }
+
+    /* STATUS GRID */
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+    .status-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+    }
+    .status-card .s-title { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.35rem; }
+    .status-card .s-sub { font-size: 0.75rem; color: var(--muted); margin-bottom: 0.75rem; }
+    .badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.2rem 0.6rem;
+      border-radius: 99px;
+    }
+    .badge.in-progress { background: #1c3a5e; color: #60a5fa; }
+    .badge.not-started { background: #1f1f1f; color: var(--muted); }
+    .badge.done { background: #14532d; color: #4ade80; }
+
+    /* TASKS */
+    .task-list { display: flex; flex-direction: column; gap: 0.6rem; }
+    .task-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.6rem 0.75rem;
+      background: var(--surface2);
+      border-radius: 8px;
+      font-size: 0.875rem;
+    }
+    .task-item .t-badge { flex-shrink: 0; }
+
+    /* QUICK LINKS */
+    .links-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 0.75rem;
+    }
+    .quick-link {
+      display: block;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      text-decoration: none;
+      color: var(--text);
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: border-color 0.15s;
+    }
+    .quick-link:hover { border-color: var(--amber); color: var(--amber); }
+    .quick-link .ql-label { font-size: 0.7rem; color: var(--muted); display: block; margin-top: 0.2rem; font-weight: 400; }
+  </style>
+</head>
+<body>
+
+  <!-- AUTH SPLASH -->
+  <div id="splash">
+    <div class="splash-logo">⚡ FlashOne HQ</div>
+    <div class="splash-sub">Project dashboard — private access only</div>
+    <button id="sign-in-btn">Sign in with Google</button>
+    <div id="auth-error"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard">
+    <header>
+      <div class="logo">⚡ FlashOne HQ</div>
+      <div class="header-right">
+        <span id="user-email"></span>
+        <button id="sign-out-btn">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+
+      <!-- WARNING BANNER -->
+      <div id="rate-warning"></div>
+
+      <!-- CLAUDE RATE LIMIT TRACKER -->
+      <div class="card">
+        <div class="card-title">🤖 Claude Rate Limit Tracker</div>
+        <div class="rate-grid">
+          <div class="rate-item">
+            <label>Session Rate Limit</label>
+            <div class="bar-track"><div class="bar-fill ok" id="session-bar"></div></div>
+            <div class="rate-row">
+              <span class="pct-label" id="session-pct-label">0%</span>
+              <input class="rate-input" id="session-input" type="number" min="0" max="100" placeholder="%" />
+            </div>
+          </div>
+          <div class="rate-item">
+            <label>Weekly Rate Limit</label>
+            <div class="bar-track"><div class="bar-fill ok" id="weekly-bar"></div></div>
+            <div class="rate-row">
+              <span class="pct-label" id="weekly-pct-label">0%</span>
+              <input class="rate-input" id="weekly-input" type="number" min="0" max="100" placeholder="%" />
+            </div>
+          </div>
+        </div>
+        <div class="legend">
+          <span><span class="dot ok"></span> &lt;50% Good</span>
+          <span><span class="dot warning"></span> 50–70% Watch</span>
+          <span><span class="dot danger"></span> &gt;70% Pause</span>
+        </div>
+        <div class="rate-footer">
+          <span class="last-updated">Last updated: <span id="rate-last-updated">Never</span></span>
+          <button class="update-btn" id="update-rates-btn">Update</button>
+        </div>
+      </div>
+
+      <!-- PROJECT STATUS -->
+      <div class="card">
+        <div class="card-title">📊 Project Status</div>
+        <div class="status-grid">
+          <div class="status-card">
+            <div class="s-title">QA Testing</div>
+            <div class="s-sub">App exploration + test plan</div>
+            <span class="badge in-progress">In Progress</span>
+          </div>
+          <div class="status-card">
+            <div class="s-title">Demo Content</div>
+            <div class="s-sub">Repeatable demo for YouTube</div>
+            <span class="badge not-started">Not Started</span>
+          </div>
+          <div class="status-card">
+            <div class="s-title">Android Campaign</div>
+            <div class="s-sub">Play Store approval push</div>
+            <span class="badge not-started">Not Started</span>
+          </div>
+          <div class="status-card">
+            <div class="s-title">Social Media</div>
+            <div class="s-sub">Instagram, X, Facebook setup</div>
+            <span class="badge not-started">Not Started</span>
+          </div>
+          <div class="status-card">
+            <div class="s-title">Project Site</div>
+            <div class="s-sub">Firebase dashboard (this!)</div>
+            <span class="badge in-progress">In Progress</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIVE TASKS -->
+      <div class="card">
+        <div class="card-title">✅ Active Tasks</div>
+        <div class="task-list">
+          <div class="task-item"><span class="badge in-progress t-badge">Active</span> Firebase project site — add Firebase Auth web config</div>
+          <div class="task-item"><span class="badge in-progress t-badge">Active</span> Make GitHub repo private</div>
+          <div class="task-item"><span class="badge in-progress t-badge">Active</span> Continue FlashOne app deep exploration</div>
+          <div class="task-item"><span class="badge not-started t-badge">Queued</span> Set up Instagram, X, Facebook accounts</div>
+          <div class="task-item"><span class="badge not-started t-badge">Queued</span> Build social media content strategy</div>
+          <div class="task-item"><span class="badge not-started t-badge">Queued</span> Set up Apple test accounts (3 tiers)</div>
+          <div class="task-item"><span class="badge not-started t-badge">Queued</span> Build demo content + YouTube script</div>
+        </div>
+      </div>
+
+      <!-- QUICK LINKS -->
+      <div class="card">
+        <div class="card-title">🔗 Quick Links</div>
+        <div class="links-grid">
+          <a class="quick-link" href="https://app.flashone.ai/app/" target="_blank">
+            FlashOne Web App
+            <span class="ql-label">app.flashone.ai/app/</span>
+          </a>
+          <a class="quick-link" href="https://flashone.ai" target="_blank">
+            Marketing Site
+            <span class="ql-label">flashone.ai</span>
+          </a>
+          <a class="quick-link" href="https://get.flashone.ai" target="_blank">
+            Funnel
+            <span class="ql-label">get.flashone.ai</span>
+          </a>
+          <a class="quick-link" href="https://github.com/martin-flashone/flashone-hq" target="_blank">
+            GitHub Repo
+            <span class="ql-label">martin-flashone/flashone-hq</span>
+          </a>
+          <a class="quick-link" href="https://console.firebase.google.com/project/flashone-hq" target="_blank">
+            Firebase Console
+            <span class="ql-label">flashone-hq project</span>
+          </a>
+          <a class="quick-link" href="https://console.anthropic.com" target="_blank">
+            Anthropic Console
+            <span class="ql-label">Check rate limits</span>
+          </a>
+        </div>
+      </div>
+
+    </main>
+  </div>
+
+</body>
+</html>
