@@ -8,7 +8,7 @@
   <!-- Firebase SDKs -->
   <script type="module">
     import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-    import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged }
+    import { getAuth, signInWithPopup, signInWithRedirect, GoogleAuthProvider, signOut, onAuthStateChanged }
       from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
 
     const firebaseConfig = {
@@ -29,16 +29,6 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
-
-    // Handle redirect result (mobile flow)
-    getRedirectResult(auth).then((result) => {
-      // handled by onAuthStateChanged below
-    }).catch((e) => {
-      if (e && e.code !== 'auth/no-current-user') {
-        document.getElementById('auth-error').textContent = 'Sign in failed: ' + (e.message || e.code);
-        document.getElementById('auth-error').style.display = 'block';
-      }
-    });
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
