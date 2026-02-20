@@ -496,11 +496,6 @@
     var auth = firebase.auth();
     var provider = new firebase.auth.GoogleAuthProvider();
 
-    // Capture redirect result on iOS Safari (fires before onAuthStateChanged)
-    auth.getRedirectResult().catch(function(err) {
-      console.warn('getRedirectResult error:', err);
-    });
-
     auth.onAuthStateChanged(function(user) {
       if (user) {
         if (ALLOWED_EMAILS.indexOf(user.email) === -1) {
@@ -530,16 +525,10 @@
 
     document.getElementById('sign-in-btn').addEventListener('click', function() {
       document.getElementById('auth-error').style.display = 'none';
-      // Use redirect on mobile (popup blocked by Safari/mobile browsers)
-      var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isMobile) {
-        auth.signInWithRedirect(provider);
-      } else {
-        auth.signInWithPopup(provider).catch(function(e) {
-          document.getElementById('auth-error').textContent = 'Sign in failed: ' + (e.message || 'Try again.');
-          document.getElementById('auth-error').style.display = 'block';
-        });
-      }
+      auth.signInWithPopup(provider).catch(function(e) {
+        document.getElementById('auth-error').textContent = 'Sign in failed: ' + (e.message || 'Try again.');
+        document.getElementById('auth-error').style.display = 'block';
+      });
     });
 
     document.getElementById('sign-out-btn').addEventListener('click', function() {
