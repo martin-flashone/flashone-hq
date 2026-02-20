@@ -5,183 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FlashOne HQ</title>
 
-  <!-- Firebase SDKs -->
-  <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
-    import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged }
-      from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
-
-    const firebaseConfig = {
-      apiKey: "AIzaSyB5hwpQZD10J5tNgzXnBhTB1uusfaXKy_s",
-      authDomain: "flashone-hq.web.app",
-      projectId: "flashone-hq",
-      storageBucket: "flashone-hq.firebasestorage.app",
-      messagingSenderId: "134997614663",
-      appId: "1:134997614663:web:4d2aecd2776c44d34d1162",
-      measurementId: "G-VRD20VY1NZ"
-    };
-
-    const ALLOWED_EMAILS = [
-      'sunshine@bravefireandice.com',
-      'proflashone@gmail.com'
-    ];
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const provider = new GoogleAuthProvider();
-
-    // Capture redirect result on iOS Safari (fires before onAuthStateChanged)
-    getRedirectResult(auth).catch((err) => {
-      console.warn('getRedirectResult error:', err);
-    });
-
-    onAuthStateChanged(auth, (user) => {
-      if (user) {
-        if (!ALLOWED_EMAILS.includes(user.email)) {
-          signOut(auth);
-          showAuth();
-          document.getElementById('auth-error').textContent =
-            `Access denied for ${user.email}. This dashboard is private.`;
-          document.getElementById('auth-error').style.display = 'block';
-          return;
-        }
-        hideSplash();
-        document.getElementById('user-email').textContent = user.email;
-        loadDashboard();
-      } else {
-        showAuth();
-      }
-    });
-
-    function showAuth() {
-      document.getElementById('splash').style.display = 'flex';
-      document.getElementById('dashboard').style.display = 'none';
-    }
-    function hideSplash() {
-      document.getElementById('splash').style.display = 'none';
-      document.getElementById('dashboard').style.display = 'block';
-    }
-
-    document.getElementById('sign-in-btn').addEventListener('click', async () => {
-      try {
-        document.getElementById('auth-error').style.display = 'none';
-        // Use redirect on mobile (popup blocked by Safari/mobile browsers)
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        if (isMobile) {
-          await signInWithRedirect(auth, provider);
-        } else {
-          await signInWithPopup(auth, provider);
-        }
-      } catch (e) {
-        document.getElementById('auth-error').textContent = 'Sign in failed: ' + (e.message || 'Try again.');
-        document.getElementById('auth-error').style.display = 'block';
-      }
-    });
-
-    document.getElementById('sign-out-btn').addEventListener('click', () => signOut(auth));
-
-    function loadDashboard() {
-      loadRateLimits();
-      loadWorkLog();
-    }
-
-    // ── Rate Limit Tracker ──────────────────────────────────────────
-    function loadRateLimits() {
-      const sessionPct = parseInt(localStorage.getItem('session_rate_pct') || '0');
-      const weeklyPct  = parseInt(localStorage.getItem('weekly_rate_pct')  || '0');
-      const lastUpdated = localStorage.getItem('rate_last_updated') || 'Never';
-      setRateLimit('session', sessionPct);
-      setRateLimit('weekly',  weeklyPct);
-      document.getElementById('rate-last-updated').textContent = lastUpdated;
-      checkWarnings(sessionPct, weeklyPct);
-    }
-
-    function setRateLimit(type, pct) {
-      const bar   = document.getElementById(`${type}-bar`);
-      const label = document.getElementById(`${type}-pct-label`);
-      const input = document.getElementById(`${type}-input`);
-      pct = Math.min(100, Math.max(0, pct));
-      bar.style.width = pct + '%';
-      bar.className = 'bar-fill ' + (pct >= 70 ? 'danger' : pct >= 50 ? 'warning' : 'ok');
-      label.textContent = pct + '%';
-      if (input) input.value = pct;
-    }
-
-    function checkWarnings(sessionPct, weeklyPct) {
-      const banner = document.getElementById('rate-warning');
-      if (sessionPct >= 70 || weeklyPct >= 70) {
-        const msgs = [];
-        if (sessionPct >= 70) msgs.push(`Session at ${sessionPct}%`);
-        if (weeklyPct  >= 70) msgs.push(`Weekly at ${weeklyPct}%`);
-        banner.textContent = `⚠️ Rate limit warning: ${msgs.join(' · ')} — pausing heavy tasks.`;
-        banner.style.display = 'block';
-      } else {
-        banner.style.display = 'none';
-      }
-    }
-
-    document.getElementById('update-rates-btn').addEventListener('click', () => {
-      const sessionPct = parseInt(document.getElementById('session-input').value || '0');
-      const weeklyPct  = parseInt(document.getElementById('weekly-input').value  || '0');
-      localStorage.setItem('session_rate_pct',  sessionPct);
-      localStorage.setItem('weekly_rate_pct',   weeklyPct);
-      const now = new Date().toLocaleString();
-      localStorage.setItem('rate_last_updated', now);
-      document.getElementById('rate-last-updated').textContent = now;
-      setRateLimit('session', sessionPct);
-      setRateLimit('weekly',  weeklyPct);
-      checkWarnings(sessionPct, weeklyPct);
-    });
-
-    // ── Work Log ────────────────────────────────────────────────────
-    async function loadWorkLog() {
-      const container = document.getElementById('work-log-list');
-      const lastUpdatedEl = document.getElementById('log-last-updated');
-      try {
-        const res = await fetch('/work-log.json?t=' + Date.now());
-        const data = await res.json();
-
-        if (data.lastUpdated) {
-          const d = new Date(data.lastUpdated);
-          lastUpdatedEl.textContent = d.toLocaleString('en-US', {
-            month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
-            hour12: true, timeZoneName: 'short'
-          });
-        }
-
-        container.innerHTML = '';
-        const entries = [...data.entries].reverse(); // newest first
-        entries.forEach(entry => {
-          const div = document.createElement('div');
-          div.className = 'log-item';
-          const catColor = {
-            infrastructure: 'cat-infra',
-            qa:             'cat-qa',
-            content:        'cat-content',
-            social:         'cat-social',
-            other:          'cat-other'
-          }[entry.category] || 'cat-other';
-
-          div.innerHTML = `
-            <div class="log-meta">
-              <span class="log-date">${entry.date} · ${entry.time}</span>
-              <span class="log-cat ${catColor}">${entry.category}</span>
-            </div>
-            <div class="log-task">${entry.task}</div>
-            ${entry.notes ? `<div class="log-notes">${entry.notes}</div>` : ''}
-            <span class="badge ${entry.status === 'done' ? 'done' : entry.status === 'in-progress' ? 'in-progress' : 'not-started'} log-status">
-              ${entry.status === 'done' ? '✓ Done' : entry.status === 'in-progress' ? '⚡ In Progress' : '○ Queued'}
-            </span>
-          `;
-          container.appendChild(div);
-        });
-      } catch (e) {
-        container.innerHTML = '<div class="log-item" style="color:var(--muted)">Could not load work log.</div>';
-      }
-    }
-
-    window._auth = auth;
-  </script>
+  <!-- Firebase Compat SDKs (avoids _getProjectConfig bug on iOS WebKit) -->
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -650,5 +476,176 @@
     </main>
   </div>
 
+  <script>
+    var firebaseConfig = {
+      apiKey: "AIzaSyB5hwpQZD10J5tNgzXnBhTB1uusfaXKy_s",
+      authDomain: "flashone-hq.web.app",
+      projectId: "flashone-hq",
+      storageBucket: "flashone-hq.firebasestorage.app",
+      messagingSenderId: "134997614663",
+      appId: "1:134997614663:web:4d2aecd2776c44d34d1162",
+      measurementId: "G-VRD20VY1NZ"
+    };
+
+    var ALLOWED_EMAILS = [
+      'sunshine@bravefireandice.com',
+      'proflashone@gmail.com'
+    ];
+
+    firebase.initializeApp(firebaseConfig);
+    var auth = firebase.auth();
+    var provider = new firebase.auth.GoogleAuthProvider();
+
+    // Capture redirect result on iOS Safari (fires before onAuthStateChanged)
+    auth.getRedirectResult().catch(function(err) {
+      console.warn('getRedirectResult error:', err);
+    });
+
+    auth.onAuthStateChanged(function(user) {
+      if (user) {
+        if (ALLOWED_EMAILS.indexOf(user.email) === -1) {
+          auth.signOut();
+          showAuth();
+          document.getElementById('auth-error').textContent =
+            'Access denied for ' + user.email + '. This dashboard is private.';
+          document.getElementById('auth-error').style.display = 'block';
+          return;
+        }
+        hideSplash();
+        document.getElementById('user-email').textContent = user.email;
+        loadDashboard();
+      } else {
+        showAuth();
+      }
+    });
+
+    function showAuth() {
+      document.getElementById('splash').style.display = 'flex';
+      document.getElementById('dashboard').style.display = 'none';
+    }
+    function hideSplash() {
+      document.getElementById('splash').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+    }
+
+    document.getElementById('sign-in-btn').addEventListener('click', function() {
+      document.getElementById('auth-error').style.display = 'none';
+      // Use redirect on mobile (popup blocked by Safari/mobile browsers)
+      var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        auth.signInWithRedirect(provider);
+      } else {
+        auth.signInWithPopup(provider).catch(function(e) {
+          document.getElementById('auth-error').textContent = 'Sign in failed: ' + (e.message || 'Try again.');
+          document.getElementById('auth-error').style.display = 'block';
+        });
+      }
+    });
+
+    document.getElementById('sign-out-btn').addEventListener('click', function() {
+      auth.signOut();
+    });
+
+    function loadDashboard() {
+      loadRateLimits();
+      loadWorkLog();
+    }
+
+    // ── Rate Limit Tracker ──────────────────────────────────────────
+    function loadRateLimits() {
+      var sessionPct = parseInt(localStorage.getItem('session_rate_pct') || '0');
+      var weeklyPct  = parseInt(localStorage.getItem('weekly_rate_pct')  || '0');
+      var lastUpdated = localStorage.getItem('rate_last_updated') || 'Never';
+      setRateLimit('session', sessionPct);
+      setRateLimit('weekly',  weeklyPct);
+      document.getElementById('rate-last-updated').textContent = lastUpdated;
+      checkWarnings(sessionPct, weeklyPct);
+    }
+
+    function setRateLimit(type, pct) {
+      var bar   = document.getElementById(type + '-bar');
+      var label = document.getElementById(type + '-pct-label');
+      var input = document.getElementById(type + '-input');
+      pct = Math.min(100, Math.max(0, pct));
+      bar.style.width = pct + '%';
+      bar.className = 'bar-fill ' + (pct >= 70 ? 'danger' : pct >= 50 ? 'warning' : 'ok');
+      label.textContent = pct + '%';
+      if (input) input.value = pct;
+    }
+
+    function checkWarnings(sessionPct, weeklyPct) {
+      var banner = document.getElementById('rate-warning');
+      if (sessionPct >= 70 || weeklyPct >= 70) {
+        var msgs = [];
+        if (sessionPct >= 70) msgs.push('Session at ' + sessionPct + '%');
+        if (weeklyPct  >= 70) msgs.push('Weekly at ' + weeklyPct + '%');
+        banner.textContent = '\u26A0\uFE0F Rate limit warning: ' + msgs.join(' \u00B7 ') + ' \u2014 pausing heavy tasks.';
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
+
+    document.getElementById('update-rates-btn').addEventListener('click', function() {
+      var sessionPct = parseInt(document.getElementById('session-input').value || '0');
+      var weeklyPct  = parseInt(document.getElementById('weekly-input').value  || '0');
+      localStorage.setItem('session_rate_pct',  sessionPct);
+      localStorage.setItem('weekly_rate_pct',   weeklyPct);
+      var now = new Date().toLocaleString();
+      localStorage.setItem('rate_last_updated', now);
+      document.getElementById('rate-last-updated').textContent = now;
+      setRateLimit('session', sessionPct);
+      setRateLimit('weekly',  weeklyPct);
+      checkWarnings(sessionPct, weeklyPct);
+    });
+
+    // ── Work Log ────────────────────────────────────────────────────
+    function loadWorkLog() {
+      var container = document.getElementById('work-log-list');
+      var lastUpdatedEl = document.getElementById('log-last-updated');
+      fetch('/work-log.json?t=' + Date.now())
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+          if (data.lastUpdated) {
+            var d = new Date(data.lastUpdated);
+            lastUpdatedEl.textContent = d.toLocaleString('en-US', {
+              month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit',
+              hour12: true, timeZoneName: 'short'
+            });
+          }
+
+          container.innerHTML = '';
+          var entries = data.entries.slice().reverse(); // newest first
+          entries.forEach(function(entry) {
+            var div = document.createElement('div');
+            div.className = 'log-item';
+            var catColor = {
+              infrastructure: 'cat-infra',
+              qa:             'cat-qa',
+              content:        'cat-content',
+              social:         'cat-social',
+              other:          'cat-other'
+            }[entry.category] || 'cat-other';
+
+            div.innerHTML =
+              '<div class="log-meta">' +
+                '<span class="log-date">' + entry.date + ' \u00B7 ' + entry.time + '</span>' +
+                '<span class="log-cat ' + catColor + '">' + entry.category + '</span>' +
+              '</div>' +
+              '<div class="log-task">' + entry.task + '</div>' +
+              (entry.notes ? '<div class="log-notes">' + entry.notes + '</div>' : '') +
+              '<span class="badge ' + (entry.status === 'done' ? 'done' : entry.status === 'in-progress' ? 'in-progress' : 'not-started') + ' log-status">' +
+                (entry.status === 'done' ? '\u2713 Done' : entry.status === 'in-progress' ? '\u26A1 In Progress' : '\u25CB Queued') +
+              '</span>';
+            container.appendChild(div);
+          });
+        })
+        .catch(function() {
+          container.innerHTML = '<div class="log-item" style="color:var(--muted)">Could not load work log.</div>';
+        });
+    }
+
+    window._auth = auth;
+  </script>
 </body>
 </html>
