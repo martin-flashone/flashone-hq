@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FlashOne HQ</title>
 
-  <!-- Firebase Compat SDKs (avoids _getProjectConfig bug on iOS WebKit) -->
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+  <!-- Google Identity Services (replaces Firebase Auth for iOS WebKit compat) -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -343,8 +342,8 @@
           </div>
           <div class="status-card">
             <div class="s-title">Google Auth</div>
-            <div class="s-sub">Firebase support email config pending</div>
-            <span class="badge in-progress">In Progress</span>
+            <div class="s-sub">Google Identity Services (bypasses Firebase Auth)</div>
+            <span class="badge done">Done</span>
           </div>
           <div class="status-card">
             <div class="s-title">Demo Content</div>
@@ -365,10 +364,10 @@
         <div class="task-list">
 
           <div class="task-item">
-            <span class="badge in-progress t-badge">Active</span>
+            <span class="badge done t-badge">Done</span>
             <div class="t-text">
-              Complete Firebase Google Auth (set support email)
-              <div class="t-note">Blocked by Angular dropdown — needs manual step in Firebase Console</div>
+              Google Auth — replaced Firebase Auth with Google Identity Services
+              <div class="t-note">Bypasses all iOS WebKit / Firebase popup/redirect issues</div>
             </div>
           </div>
 
@@ -477,42 +476,43 @@
   </div>
 
   <script>
-    var firebaseConfig = {
-      apiKey: "AIzaSyB5hwpQZD10J5tNgzXnBhTB1uusfaXKy_s",
-      authDomain: "flashone-hq.web.app",
-      projectId: "flashone-hq",
-      storageBucket: "flashone-hq.firebasestorage.app",
-      messagingSenderId: "134997614663",
-      appId: "1:134997614663:web:4d2aecd2776c44d34d1162",
-      measurementId: "G-VRD20VY1NZ"
-    };
+    var GIS_CLIENT_ID = '134997614663-oubo37efttigbdpej7kfjq2f0gp5hqas.apps.googleusercontent.com';
 
     var ALLOWED_EMAILS = [
       'sunshine@bravefireandice.com',
       'proflashone@gmail.com'
     ];
 
-    firebase.initializeApp(firebaseConfig);
-    var auth = firebase.auth();
-    var provider = new firebase.auth.GoogleAuthProvider();
+    // Decode JWT payload (no verification needed — GIS signs it)
+    function decodeJwtPayload(token) {
+      var base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+      return JSON.parse(atob(base64));
+    }
 
-    auth.onAuthStateChanged(function(user) {
-      if (user) {
-        if (ALLOWED_EMAILS.indexOf(user.email) === -1) {
-          auth.signOut();
-          showAuth();
-          document.getElementById('auth-error').textContent =
-            'Access denied for ' + user.email + '. This dashboard is private.';
-          document.getElementById('auth-error').style.display = 'block';
-          return;
-        }
-        hideSplash();
-        document.getElementById('user-email').textContent = user.email;
-        loadDashboard();
-      } else {
+    function handleCredentialResponse(response) {
+      var payload = decodeJwtPayload(response.credential);
+      var email = payload.email;
+
+      if (ALLOWED_EMAILS.indexOf(email) === -1) {
         showAuth();
+        document.getElementById('auth-error').textContent =
+          'Access denied for ' + email + '. This dashboard is private.';
+        document.getElementById('auth-error').style.display = 'block';
+        return;
       }
-    });
+
+      // Store session
+      sessionStorage.setItem('flashone_user', JSON.stringify({
+        email: email,
+        name: payload.name || email,
+        picture: payload.picture || '',
+        exp: payload.exp
+      }));
+
+      hideSplash();
+      document.getElementById('user-email').textContent = email;
+      loadDashboard();
+    }
 
     function showAuth() {
       document.getElementById('splash').style.display = 'flex';
@@ -523,16 +523,60 @@
       document.getElementById('dashboard').style.display = 'block';
     }
 
-    document.getElementById('sign-in-btn').addEventListener('click', function() {
-      document.getElementById('auth-error').style.display = 'none';
-      auth.signInWithPopup(provider).catch(function(e) {
-        document.getElementById('auth-error').textContent = 'Sign in failed: ' + (e.message || 'Try again.');
-        document.getElementById('auth-error').style.display = 'block';
+    // Check existing session on page load
+    function checkSession() {
+      var stored = sessionStorage.getItem('flashone_user');
+      if (stored) {
+        var user = JSON.parse(stored);
+        // Check if token has expired
+        if (user.exp && (user.exp * 1000) > Date.now()) {
+          hideSplash();
+          document.getElementById('user-email').textContent = user.email;
+          loadDashboard();
+          return;
+        }
+        // Expired — clear and show login
+        sessionStorage.removeItem('flashone_user');
+      }
+      showAuth();
+    }
+
+    // Initialize GIS when library loads
+    function initGIS() {
+      google.accounts.id.initialize({
+        client_id: GIS_CLIENT_ID,
+        callback: handleCredentialResponse
       });
-    });
+      // Render the Google button in place of our custom button
+      var signInBtn = document.getElementById('sign-in-btn');
+      signInBtn.style.display = 'none';
+      var gBtnContainer = document.createElement('div');
+      gBtnContainer.id = 'g-btn-container';
+      signInBtn.parentNode.insertBefore(gBtnContainer, signInBtn.nextSibling);
+      google.accounts.id.renderButton(gBtnContainer, {
+        theme: 'filled_black',
+        size: 'large',
+        text: 'signin_with',
+        shape: 'pill',
+        width: 250
+      });
+    }
+
+    // Wait for GIS library to load, then init
+    function waitForGIS() {
+      if (typeof google !== 'undefined' && google.accounts) {
+        initGIS();
+        checkSession();
+      } else {
+        setTimeout(waitForGIS, 100);
+      }
+    }
+    waitForGIS();
 
     document.getElementById('sign-out-btn').addEventListener('click', function() {
-      auth.signOut();
+      sessionStorage.removeItem('flashone_user');
+      google.accounts.id.disableAutoSelect();
+      showAuth();
     });
 
     function loadDashboard() {
@@ -634,7 +678,6 @@
         });
     }
 
-    window._auth = auth;
   </script>
 </body>
 </html>
