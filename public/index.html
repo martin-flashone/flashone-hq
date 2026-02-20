@@ -7,9 +7,9 @@
 
   <!-- Firebase SDKs -->
   <script type="module">
-    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
-    import { getAuth, signInWithPopup, signInWithRedirect, GoogleAuthProvider, signOut, onAuthStateChanged }
-      from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+    import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js';
+    import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut, onAuthStateChanged }
+      from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 
     const firebaseConfig = {
       apiKey: "AIzaSyB5hwpQZD10J5tNgzXnBhTB1uusfaXKy_s",
@@ -29,6 +29,11 @@
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
+
+    // Capture redirect result on iOS Safari (fires before onAuthStateChanged)
+    getRedirectResult(auth).catch((err) => {
+      console.warn('getRedirectResult error:', err);
+    });
 
     onAuthStateChanged(auth, (user) => {
       if (user) {
