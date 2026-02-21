@@ -5,9 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FlashOne HQ</title>
 
-  <!-- Google Identity Services (replaces Firebase Auth for iOS WebKit compat) -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
-
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -45,6 +42,18 @@
     }
     .splash-logo { font-size: 2.5rem; font-weight: 800; color: var(--amber); letter-spacing: -1px; }
     .splash-sub  { color: var(--muted); font-size: 0.95rem; }
+    #password-input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 1rem;
+      width: 280px;
+      text-align: center;
+      outline: none;
+    }
+    #password-input:focus { border-color: var(--amber); }
     #sign-in-btn {
       background: var(--amber);
       color: #000;
@@ -75,7 +84,6 @@
     }
     .logo         { font-size: 1.25rem; font-weight: 800; color: var(--amber); }
     .header-right { display: flex; align-items: center; gap: 1rem; }
-    #user-email   { font-size: 0.8rem; color: var(--muted); }
     #sign-out-btn {
       background: var(--surface2);
       border: 1px solid var(--border);
@@ -270,7 +278,8 @@
   <div id="splash">
     <div class="splash-logo">⚡ FlashOne HQ</div>
     <div class="splash-sub">Project dashboard — private access only</div>
-    <button id="sign-in-btn">Sign in with Google</button>
+    <input id="password-input" type="password" placeholder="Enter password" autocomplete="off" />
+    <button id="sign-in-btn">Unlock</button>
     <div id="auth-error"></div>
   </div>
 
@@ -279,8 +288,7 @@
     <header>
       <div class="logo">⚡ FlashOne HQ</div>
       <div class="header-right">
-        <span id="user-email"></span>
-        <button id="sign-out-btn">Sign out</button>
+        <button id="sign-out-btn">Lock</button>
       </div>
     </header>
 
@@ -337,12 +345,7 @@
           </div>
           <div class="status-card">
             <div class="s-title">Project Dashboard</div>
-            <div class="s-sub">Firebase hosting, auth gate, work log</div>
-            <span class="badge done">Done</span>
-          </div>
-          <div class="status-card">
-            <div class="s-title">Google Auth</div>
-            <div class="s-sub">Google Identity Services (bypasses Firebase Auth)</div>
+            <div class="s-sub">GitHub Pages hosting, password gate, work log</div>
             <span class="badge done">Done</span>
           </div>
           <div class="status-card">
@@ -366,8 +369,8 @@
           <div class="task-item">
             <span class="badge done t-badge">Done</span>
             <div class="t-text">
-              Google Auth — replaced Firebase Auth with Google Identity Services
-              <div class="t-note">Bypasses all iOS WebKit / Firebase popup/redirect issues</div>
+              Migrate HQ dashboard from Firebase to GitHub Pages
+              <div class="t-note">Password-gated static site, no server-side auth needed</div>
             </div>
           </div>
 
@@ -461,10 +464,6 @@
             GitHub Repo
             <span class="ql-label">martin-flashone/flashone-hq</span>
           </a>
-          <a class="quick-link" href="https://console.firebase.google.com/project/flashone-hq" target="_blank">
-            Firebase Console
-            <span class="ql-label">flashone-hq project</span>
-          </a>
           <a class="quick-link" href="https://console.anthropic.com" target="_blank">
             Anthropic Console
             <span class="ql-label">Check rate limits</span>
@@ -476,42 +475,15 @@
   </div>
 
   <script>
-    var GIS_CLIENT_ID = '134997614663-oubo37efttigbdpej7kfjq2f0gp5hqas.apps.googleusercontent.com';
+    // SHA-256 hash of the access password
+    var PASSWORD_HASH = 'f2702b2acd222146781c8eaa7e16b217816828c4b9e63471d41a29ec82884edb';
 
-    var ALLOWED_EMAILS = [
-      'sunshine@bravefireandice.com',
-      'proflashone@gmail.com'
-    ];
-
-    // Decode JWT payload (no verification needed — GIS signs it)
-    function decodeJwtPayload(token) {
-      var base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      return JSON.parse(atob(base64));
-    }
-
-    function handleCredentialResponse(response) {
-      var payload = decodeJwtPayload(response.credential);
-      var email = payload.email;
-
-      if (ALLOWED_EMAILS.indexOf(email) === -1) {
-        showAuth();
-        document.getElementById('auth-error').textContent =
-          'Access denied for ' + email + '. This dashboard is private.';
-        document.getElementById('auth-error').style.display = 'block';
-        return;
-      }
-
-      // Store session
-      sessionStorage.setItem('flashone_user', JSON.stringify({
-        email: email,
-        name: payload.name || email,
-        picture: payload.picture || '',
-        exp: payload.exp
-      }));
-
-      hideSplash();
-      document.getElementById('user-email').textContent = email;
-      loadDashboard();
+    async function sha256(str) {
+      var buf = new TextEncoder().encode(str);
+      var hash = await crypto.subtle.digest('SHA-256', buf);
+      return Array.from(new Uint8Array(hash)).map(function(b) {
+        return b.toString(16).padStart(2, '0');
+      }).join('');
     }
 
     function showAuth() {
@@ -523,61 +495,43 @@
       document.getElementById('dashboard').style.display = 'block';
     }
 
+    async function attemptLogin() {
+      var pw = document.getElementById('password-input').value;
+      var errEl = document.getElementById('auth-error');
+      if (!pw) return;
+      var hash = await sha256(pw);
+      if (hash === PASSWORD_HASH) {
+        sessionStorage.setItem('flashone_auth', '1');
+        errEl.style.display = 'none';
+        hideSplash();
+        loadDashboard();
+      } else {
+        errEl.textContent = 'Incorrect password.';
+        errEl.style.display = 'block';
+      }
+    }
+
     // Check existing session on page load
     function checkSession() {
-      var stored = sessionStorage.getItem('flashone_user');
-      if (stored) {
-        var user = JSON.parse(stored);
-        // Check if token has expired
-        if (user.exp && (user.exp * 1000) > Date.now()) {
-          hideSplash();
-          document.getElementById('user-email').textContent = user.email;
-          loadDashboard();
-          return;
-        }
-        // Expired — clear and show login
-        sessionStorage.removeItem('flashone_user');
-      }
-      showAuth();
-    }
-
-    // Initialize GIS when library loads
-    function initGIS() {
-      google.accounts.id.initialize({
-        client_id: GIS_CLIENT_ID,
-        callback: handleCredentialResponse
-      });
-      // Render the Google button in place of our custom button
-      var signInBtn = document.getElementById('sign-in-btn');
-      signInBtn.style.display = 'none';
-      var gBtnContainer = document.createElement('div');
-      gBtnContainer.id = 'g-btn-container';
-      signInBtn.parentNode.insertBefore(gBtnContainer, signInBtn.nextSibling);
-      google.accounts.id.renderButton(gBtnContainer, {
-        theme: 'filled_black',
-        size: 'large',
-        text: 'signin_with',
-        shape: 'pill',
-        width: 250
-      });
-    }
-
-    // Wait for GIS library to load, then init
-    function waitForGIS() {
-      if (typeof google !== 'undefined' && google.accounts) {
-        initGIS();
-        checkSession();
+      if (sessionStorage.getItem('flashone_auth') === '1') {
+        hideSplash();
+        loadDashboard();
       } else {
-        setTimeout(waitForGIS, 100);
+        showAuth();
       }
     }
-    waitForGIS();
+
+    document.getElementById('sign-in-btn').addEventListener('click', attemptLogin);
+    document.getElementById('password-input').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') attemptLogin();
+    });
 
     document.getElementById('sign-out-btn').addEventListener('click', function() {
-      sessionStorage.removeItem('flashone_user');
-      google.accounts.id.disableAutoSelect();
+      sessionStorage.removeItem('flashone_auth');
       showAuth();
     });
+
+    checkSession();
 
     function loadDashboard() {
       loadRateLimits();
@@ -636,7 +590,7 @@
     function loadWorkLog() {
       var container = document.getElementById('work-log-list');
       var lastUpdatedEl = document.getElementById('log-last-updated');
-      fetch('/work-log.json?t=' + Date.now())
+      fetch('work-log.json?t=' + Date.now())
         .then(function(res) { return res.json(); })
         .then(function(data) {
           if (data.lastUpdated) {
